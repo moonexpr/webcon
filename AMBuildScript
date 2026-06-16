@@ -24,10 +24,31 @@ def Normalize(path):
 
 class WebconConfig(object):
   def __init__(self):
-    self.sdks = {}
-    self.binaries = []
     self.sm_root = None
     self.extensions = []
+    self.all_targets = []
+    self.target_archs = set()
+    self.libsafetyhook = None
+    self.libmicrohttpd = None
+
+    if builder.options.targets:
+      target_archs = builder.options.targets.split(',')
+    else:
+      target_archs = ['x86', 'x86_64']
+
+    for arch in target_archs:
+      try:
+        cxx = builder.DetectCxx(target_arch = arch)
+        self.target_archs.add(cxx.target.arch)
+      except Exception as e:
+        if builder.options.targets:
+          raise
+        print('Skipping target {}: {}'.format(arch, e))
+        continue
+      self.all_targets.append(cxx)
+
+    if not self.all_targets:
+      raise Exception('No suitable C/C++ compiler was found.')
 
   @property
   def tag(self):
@@ -52,8 +73,13 @@ class WebconConfig(object):
   def configure(self):
     builder.AddConfigureFile('pushbuild.txt')
 
-    cxx = builder.DetectCompilers()
+    if not set(self.target_archs).issubset(['x86', 'x86_64']):
+      raise Exception('Unknown target architecture: {0}'.format(self.target_archs))
 
+    for cxx in self.all_targets:
+      self.configure_cxx(cxx)
+
+  def configure_cxx(self, cxx):
     if cxx.like('gcc'):
       cxx.defines += [
         'stricmp=strcasecmp',
@@ -71,32 +97,32 @@ class WebconConfig(object):
         '-Wno-unused',
         '-Wno-switch',
         '-msse',
-        '-m32',
       ]
+      if cxx.target.arch == 'x86_64':
+        cxx.cflags += ['-fPIC']
       cxx.cxxflags += [
-          '-std=c++11',
+          '-std=c++17',
       ]
 
-      have_gcc = cxx.vendor == 'gcc'
-      have_clang = cxx.vendor == 'clang'
-      if have_clang or (have_gcc and cxx.version >= '4'):
+      have_gcc = cxx.family == 'gcc'
+      have_clang = cxx.family == 'clang'
+      if have_clang or (have_gcc and cxx.version >= 'gcc-4'):
         cxx.cflags += ['-fvisibility=hidden']
         cxx.cxxflags += ['-fvisibility-inlines-hidden']
-        if have_clang or (have_gcc and cxx.version >= '4.6'):
+        if have_clang or (have_gcc and cxx.version >= 'gcc-4.6'):
           cxx.cflags += ['-Wno-narrowing']
-        if (have_gcc and cxx.version >= '4.7') or (have_clang and cxx.version >= '3'):
+        if (have_gcc and cxx.version >= 'gcc-4.7') or (have_clang and cxx.version >= 'clang-3'):
           cxx.cxxflags += ['-Wno-delete-non-virtual-dtor']
-        if have_gcc and cxx.version >= '4.8':
+        if have_gcc and cxx.version >= 'gcc-4.8':
           cxx.cflags += ['-Wno-unused-result']
       if have_clang:
         cxx.cxxflags += ['-Wno-implicit-exception-spec-mismatch']
-        if (builder.target_platform == 'mac' and cxx.version >= '5.1') or cxx.version >= '3.4':
+        if (cxx.target.platform == 'mac' and cxx.version >= 'apple-clang-5.1') or cxx.version >= 'clang-3.4':
           cxx.cxxflags += ['-Wno-deprecated-register']
         else:
           cxx.cxxflags += ['-Wno-deprecated']
         cxx.cflags += ['-Wno-sometimes-uninitialized']
 
-      cxx.linkflags += ['-m32']
       cxx.cxxflags += [
         '-fno-exceptions',
         '-fno-threadsafe-statics',
@@ -106,7 +132,7 @@ class WebconConfig(object):
 
       if have_gcc:
         cxx.cflags += ['-mfpmath=sse']
-    elif cxx.vendor == 'msvc':
+    elif cxx.like('msvc'):
       if builder.options.debug == '1':
         cxx.cflags += ['/MTd']
         cxx.linkflags += ['/NODEFAULTLIB:libcmt']
@@ -125,9 +151,9 @@ class WebconConfig(object):
         '/EHsc',
         '/GR-',
         '/TP',
+        '/std:c++17',
       ]
       cxx.linkflags += [
-        '/MACHINE:X86',
         '/SUBSYSTEM:WINDOWS',
         'kernel32.lib',
         'user32.lib',
@@ -141,7 +167,7 @@ class WebconConfig(object):
         'uuid.lib',
         'odbc32.lib',
         'odbccp32.lib',
-      ] 
+      ]
 
     # Optimization
     if builder.options.opt == '1':
@@ -161,44 +187,132 @@ class WebconConfig(object):
           cxx.cflags += ['/d2Zi+']
 
     # This needs to be after our optimization flags which could otherwise disable it.
-    if cxx.vendor == 'msvc':
+    if cxx.like('msvc'):
       # Don't omit the frame pointer.
       cxx.cflags += ['/Oy-']
 
     # Platform-specifics
-    if builder.target_platform == 'linux':
+    if cxx.target.platform == 'linux':
       cxx.defines += ['_LINUX', 'POSIX']
       cxx.linkflags += ['-lrt']
-      if cxx.vendor == 'gcc':
+      if cxx.family == 'gcc':
         cxx.linkflags += ['-static-libgcc']
-      elif cxx.vendor == 'clang':
+      elif cxx.family == 'clang':
         cxx.linkflags += ['-lgcc_eh']
-    elif builder.target_platform == 'mac':
+    elif cxx.target.platform == 'mac':
       cxx.defines += ['OSX', '_OSX', 'POSIX']
       cxx.cflags += ['-mmacosx-version-min=10.5']
       cxx.linkflags += [
         '-mmacosx-version-min=10.5',
-        '-arch', 'i386',
         '-lstdc++',
         '-stdlib=libstdc++',
       ]
       cxx.cxxflags += ['-stdlib=libstdc++']
-    elif builder.target_platform == 'windows':
+    elif cxx.target.platform == 'windows':
       cxx.defines += ['WIN32', '_WINDOWS']
-	  
+
+  def BuildSafetyHook(self):
+    # SafetyHook provides the x86/x86_64 inline-hook trampolines that the modern
+    # SourceMod CDetour is built on. Compile it from the copy SourceMod bundles
+    # (public/safetyhook) so its API always matches public/CDetour/detours.cpp.
+    sh_root = os.path.join(self.sm_root, 'public', 'safetyhook')
+    src = os.path.join(sh_root, 'src')
+    lib = builder.StaticLibraryProject('safetyhook')
+    lib.sources = [
+      os.path.join(src, 'allocator.cpp'),
+      os.path.join(src, 'easy.cpp'),
+      os.path.join(src, 'inline_hook.cpp'),
+      os.path.join(src, 'mid_hook.cpp'),
+      os.path.join(src, 'utility.cpp'),
+      os.path.join(src, 'vmt_hook.cpp'),
+      os.path.join(sh_root, 'zydis', 'Zydis.c'),
+    ]
+    for cxx in self.all_targets:
+      binary = lib.Configure(cxx, lib.name, 'Release - {0}'.format(cxx.target.arch))
+      compiler = binary.compiler
+      # SafetyHook requires its own specific flags; start from a clean slate.
+      compiler.cxxflags = []
+      compiler.cflags = []
+      compiler.defines = []
+      compiler.includes = []
+      compiler.cxxincludes = []
+      if compiler.target.platform == 'linux':
+        compiler.cflags += [
+          '-Werror', '-Wall', '-Wextra', '-pedantic', '-Wshadow',
+          '-Wno-unused-const-variable', '-Wno-unused-function', '-fPIC',
+        ]
+        compiler.cxxflags += ['-Wnon-virtual-dtor', '-Wno-format', '-std=c++17']
+        binary.sources += [os.path.join(src, 'os.linux.cpp')]
+      elif compiler.target.platform == 'windows':
+        compiler.cflags += ['/W4']
+        compiler.cxxflags += ['/EHsc', '/permissive-', '/w14640', '/std:c++17']
+        binary.sources += [os.path.join(src, 'os.windows.cpp')]
+      compiler.includes += [os.path.join(sh_root, 'include'), os.path.join(sh_root, 'zydis')]
+    self.libsafetyhook = builder.Add(lib)
+
+  def BuildLibMicrohttpd(self):
+    # webcon vendors libmicrohttpd; build it per-arch as a static library.
+    httpd_root = os.path.join(builder.sourcePath, 'webcon', 'libmicrohttpd')
+    src = os.path.join(httpd_root, 'microhttpd')
+    lib = builder.StaticLibraryProject('microhttpd')
+    lib.sources = [
+      os.path.join(src, 'connection.c'),
+      os.path.join(src, 'reason_phrase.c'),
+      os.path.join(src, 'daemon.c'),
+      os.path.join(src, 'internal.c'),
+      os.path.join(src, 'memorypool.c'),
+      os.path.join(src, 'response.c'),
+      os.path.join(src, 'tsearch.c'),
+      os.path.join(src, 'postprocessor.c'),
+      os.path.join(src, 'digestauth.c'),
+      os.path.join(src, 'md5.c'),
+      os.path.join(src, 'basicauth.c'),
+      os.path.join(src, 'base64.c'),
+    ]
+    for cxx in self.all_targets:
+      binary = lib.Configure(cxx, lib.name, 'Release - {0}'.format(cxx.target.arch))
+      binary.compiler.includes += [src, os.path.join(httpd_root, 'include')]
+      # libmicrohttpd is vendored third-party C; don't fail its build on the
+      # newer compiler diagnostics (e.g. -Wformat-truncation) we -Werror on.
+      if cxx.like('gcc'):
+        binary.compiler.cflags += ['-Wno-error']
+      if cxx.target.platform == 'windows':
+        binary.sources += [os.path.join(httpd_root, 'platform', 'w32functions.c')]
+    self.libmicrohttpd = builder.Add(lib)
+
+  def AddCDetour(self, binary):
+    binary.sources += [os.path.join(self.sm_root, 'public', 'CDetour', 'detours.cpp')]
+    binary.compiler.cxxincludes += [os.path.join(self.sm_root, 'public', 'safetyhook', 'include')]
+    for task in self.libsafetyhook:
+      if task.target.arch == binary.compiler.target.arch:
+        binary.compiler.linkflags += [task.binary]
+        return
+    raise Exception('No suitable build of safetyhook was found.')
+
+  def AddLibMicrohttpd(self, binary):
+    for task in self.libmicrohttpd:
+      if task.target.arch == binary.compiler.target.arch:
+        binary.compiler.postlink += [task.binary]
+        return
+    raise Exception('No suitable build of libmicrohttpd was found.')
+
   def ConfigureForExtension(self, context, compiler):
     compiler.cxxincludes += [
       os.path.join(context.currentSourcePath),
       os.path.join(self.sm_root, 'public'),
+      os.path.join(self.sm_root, 'public', 'amtl', 'amtl'),
       os.path.join(self.sm_root, 'public', 'amtl'),
       os.path.join(self.sm_root, 'public', 'extensions'),
       os.path.join(self.sm_root, 'public', 'sourcepawn'),
+      os.path.join(self.sm_root, 'sourcepawn', 'include'),
     ]
     return compiler
 
 Webcon = WebconConfig()
 Webcon.detectSDKs()
 Webcon.configure()
+Webcon.BuildSafetyHook()
+Webcon.BuildLibMicrohttpd()
 
-builder.RunBuildScripts(['conplex/AMBuilder', 'webcon/AMBuilder'], { 'Webcon': Webcon })
-builder.RunScript('PackageScript', { 'Webcon': Webcon })
+builder.Build(['conplex/AMBuilder', 'webcon/AMBuilder'], { 'Webcon': Webcon })
+builder.Build('PackageScript', { 'Webcon': Webcon })

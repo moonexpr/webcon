@@ -11,6 +11,8 @@
 #ifndef UTLVECTOR_H
 #define UTLVECTOR_H
 
+#include <utility> // std::swap
+
 #ifdef _WIN32
 #pragma once
 #endif
@@ -372,7 +374,7 @@ void CUtlVector<T, A>::Sort( int (__cdecl *pfnCompare)(const T *, const T *) )
 			{
 				if ( pfnCompare( &Element( j - 1 ), &Element( j ) ) < 0 )
 				{
-					swap( Element( j - 1 ), Element( j ) );
+					std::swap( Element( j - 1 ), Element( j ) );
 				}
 			}
 		}
@@ -562,8 +564,8 @@ template< typename T, class A >
 void CUtlVector<T, A>::Swap( CUtlVector< T, A > &vec )
 {
 	m_Memory.Swap( vec.m_Memory );
-	swap( m_Size, vec.m_Size );
-	swap( m_pElements, vec.m_pElements );
+	std::swap( m_Size, vec.m_Size );
+	std::swap( m_pElements, vec.m_pElements );
 }
 
 template< typename T, class A >

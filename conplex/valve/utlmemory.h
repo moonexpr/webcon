@@ -10,6 +10,8 @@
 #ifndef UTLMEMORY_H
 #define UTLMEMORY_H
 
+#include <utility> // std::swap
+
 #ifdef _WIN32
 #pragma once
 #endif
@@ -205,9 +207,9 @@ void CUtlMemory<T,I>::Init( int nGrowSize /*= 0*/, int nInitSize /*= 0*/ )
 template< class T, class I >
 void CUtlMemory<T,I>::Swap( CUtlMemory<T,I> &mem )
 {
-	swap( m_nGrowSize, mem.m_nGrowSize );
-	swap( m_pMemory, mem.m_pMemory );
-	swap( m_nAllocationCount, mem.m_nAllocationCount );
+	std::swap( m_nGrowSize, mem.m_nGrowSize );
+	std::swap( m_pMemory, mem.m_pMemory );
+	std::swap( m_nAllocationCount, mem.m_nAllocationCount );
 }
 
 

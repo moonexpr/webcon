@@ -12,10 +12,13 @@ except:
 		sys.stderr.write('http://www.alliedmods.net/ambuild\n')
 	sys.exit(1)
 
-run = run.PrepareBuild(sourcePath=sys.path[0])
-run.default_build_folder = 'obj-' + run.target_platform
-run.options.add_option('--sm-path', type=str, dest='sm_path', default=None, help='Path to SourceMod')
-run.options.add_option('--enable-debug', action='store_const', const='1', dest='debug', help='Enable debugging symbols')
-run.options.add_option('--enable-optimize', action='store_const', const='1', dest='opt', help='Enable optimization')
-
+run = run.BuildParser(sourcePath=sys.path[0], api='2.2')
+run.options.add_argument('--sm-path', type=str, dest='sm_path', default=None,
+                       help='Path to SourceMod')
+run.options.add_argument('--enable-debug', action='store_const', const='1', dest='debug',
+                       help='Enable debugging symbols')
+run.options.add_argument('--enable-optimize', action='store_const', const='1', dest='opt',
+                       help='Enable optimization')
+run.options.add_argument('--targets', type=str, dest='targets', default=None,
+                       help='Override the target architectures (comma-separated, e.g. x86,x86_64)')
 run.Configure()

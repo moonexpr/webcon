@@ -1,23 +1,24 @@
 # vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
 import os
 
-binary = builder.compiler.Library('conplex.ext')
-Webcon.ConfigureForExtension(builder, binary.compiler)
-
-binary.compiler.includes += [
-  os.path.join(builder.sourcePath, 'conplex', 'valve'),
-]
-
-binary.sources += [
+project = builder.LibraryProject('conplex.ext')
+project.sources += [
   'extension.cpp',
   os.path.join(Webcon.sm_root, 'public', 'smsdk_ext.cpp'),
-  os.path.join(Webcon.sm_root, 'public', 'CDetour', 'detours.cpp'),
-  os.path.join(Webcon.sm_root, 'public', 'asm', 'asm.c'),
 ]
 
-binary.compiler.defines += ['SOURCEMOD_BUILD']
+for cxx in Webcon.all_targets:
+  binary = project.Configure(cxx, 'conplex.ext', '{0} - {1}'.format(Webcon.tag, cxx.target.arch))
+  Webcon.ConfigureForExtension(builder, binary.compiler)
+  Webcon.AddCDetour(binary)
 
-if builder.target_platform == 'windows':
-  binary.compiler.linkflags += ['ws2_32.lib']
+  binary.compiler.includes += [
+    os.path.join(builder.sourcePath, 'conplex', 'valve'),
+  ]
 
-Webcon.extensions += [builder.Add(binary)]
+  binary.compiler.defines += ['SOURCEMOD_BUILD']
+
+  if binary.compiler.target.platform == 'windows':
+    binary.compiler.linkflags += ['ws2_32.lib']
+
+Webcon.extensions += builder.Add(project)

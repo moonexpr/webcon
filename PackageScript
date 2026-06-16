@@ -11,6 +11,12 @@ folder_list = [
   'addons/sourcemod/configs/web/scoreboard',
 ]
 
+# 64-bit extensions live in an x64/ subfolder (SourceMod 1.12+ convention).
+for extension in Webcon.extensions:
+  if extension.target.arch == 'x86_64':
+    folder_list.append('addons/sourcemod/extensions/x64')
+    break
+
 # Create the distribution folder hierarchy.
 folder_map = {}
 for folder in folder_list:
@@ -18,7 +24,10 @@ for folder in folder_list:
   folder_map[folder] = builder.AddFolder(norm_folder)
 
 for extension in Webcon.extensions:
-  builder.AddCopy(extension.binary, folder_map['addons/sourcemod/extensions'])
+  if extension.target.arch == 'x86_64':
+    builder.AddCopy(extension.binary, folder_map['addons/sourcemod/extensions/x64'])
+  else:
+    builder.AddCopy(extension.binary, folder_map['addons/sourcemod/extensions'])
 
 # Do all straight-up file copies from the source tree.
 def CopyFiles(src, dest, files):

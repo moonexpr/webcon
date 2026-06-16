@@ -1,5 +1,8 @@
 #include "extension.h"
 
+#include <utility>
+#include <cstdint>
+
 #include "microhttpd.h"
 
 #include <fcntl.h>
@@ -32,14 +35,12 @@ MHD_Response *responseNotFound;
 struct PluginRequestHandler
 {
 	static bool matches(const char *key, const PluginRequestHandler &value);
+	static uint32_t hash(const SourceMod::detail::CharsAndLength &key);
 
 	PluginRequestHandler(const char *id, IPluginContext *context, funcid_t function, const char *name, const char *description);
 	~PluginRequestHandler();
 
-	// TODO: Once we update to a version of SM with modern AMTL,
-	// this needs to be converted to a move constructor.
-	// (and the copy ctor deletes below can go)
-	PluginRequestHandler(ke::Moveable<PluginRequestHandler> other);
+	PluginRequestHandler(PluginRequestHandler &&other);
 
 	PluginRequestHandler(PluginRequestHandler const &other) = delete;
 	PluginRequestHandler &operator =(PluginRequestHandler const &other) = delete;
@@ -58,6 +59,11 @@ bool PluginRequestHandler::matches(const char *key, const PluginRequestHandler &
 	return (strcmp(key, value.id) == 0);
 }
 
+uint32_t PluginRequestHandler::hash(const SourceMod::detail::CharsAndLength &key)
+{
+	return key.hash();
+}
+
 PluginRequestHandler::PluginRequestHandler(const char *id, IPluginContext *context, funcid_t function, const char *name, const char *description)
 {
 	callback = forwards->CreateForwardEx(NULL, ET_Single, 3, NULL, Param_Cell, Param_String, Param_String);
@@ -68,17 +74,17 @@ PluginRequestHandler::PluginRequestHandler(const char *id, IPluginContext *conte
 	this->description = strdup(description);
 }
 
-PluginRequestHandler::PluginRequestHandler(ke::Moveable<PluginRequestHandler> other)
+PluginRequestHandler::PluginRequestHandler(PluginRequestHandler &&other)
 {
-	callback = other->callback;
-	id = other->id;
-	name = other->name;
-	description = other->description;
+	callback = other.callback;
+	id = other.id;
+	name = other.name;
+	description = other.description;
 
-	other->callback = NULL;
-	other->id = NULL;
-	other->name = NULL;
-	other->description = NULL;
+	other.callback = NULL;
+	other.id = NULL;
+	other.name = NULL;
+	other.description = NULL;
 }
 
 PluginRequestHandler::~PluginRequestHandler()
@@ -99,7 +105,7 @@ bool PluginRequestHandler::IsAlive()
 
 bool PluginRequestHandler::Execute(MHD_Connection *connection, const char *method, const char *url)
 {
-	Handle_t handle = (Handle_t)(MHD_get_connection_info(connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT)->socket_context);
+	Handle_t handle = (Handle_t)(uintptr_t)(MHD_get_connection_info(connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT)->socket_context);
 
 	if (handle == BAD_HANDLE) {
 		return false;
@@ -367,7 +373,7 @@ cell_t Web_RegisterRequestHandler(IPluginContext *context, const cell_t *params)
 	// TODO: Test code
 	//defaultRequestHandler = handler.id;
 
-	requestHandlers.add(i, ke::Moveable<PluginRequestHandler>(handler));
+	requestHandlers.add(i, std::move(handler));
 
 	return 1;
 }
