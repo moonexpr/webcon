@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, "**" ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (linux x86 + x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout webcon
+        uses: actions/checkout@v4
+        with:
+          path: webcon
+
+      - name: Checkout SourceMod
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/sourcemod
+          ref: "1.12-dev"
+          submodules: recursive
+          path: sourcemod
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
+          python -m pip install --upgrade pip wheel
+          pip install git+https://github.com/alliedmodders/ambuild
+
+      - name: Configure
+        working-directory: webcon
+        run: |
+          mkdir build && cd build
+          python ../configure.py --targets x86,x86_64 --enable-optimize \
+            --sm-path "${GITHUB_WORKSPACE}/sourcemod"
+
+      - name: Build
+        working-directory: webcon/build
+        run: ambuild
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcon
+          path: webcon/build/package
