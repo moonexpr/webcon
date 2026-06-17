@@ -56,23 +56,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
 
-      - name: Add msbuild to PATH (Windows)
+      # Point AMBuild at the per-architecture vcvars scripts. AMBuild runs the
+      # matching one for whichever target (x86 / x86_64) it is configuring, so a
+      # single job builds both arches (a single vsdevcmd only exposes one).
+      - name: Set up MSVC for AMBuild (Windows)
         if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Set up MSVC environment (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
+        shell: pwsh
         run: |
-          :: See https://github.com/microsoft/vswhere/wiki/Find-VC
-          for /f "usebackq delims=*" %%i in (`vswhere -latest -property installationPath`) do (
-            call "%%i"\Common7\Tools\vsdevcmd.bat -arch=x86 -host_arch=x64
-          )
-
-          :: Loop over all environment variables and make them global.
-          for /f "delims== tokens=1,2" %%a in ('set') do (
-            echo>>"%GITHUB_ENV%" %%a=%%b
-          )
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $build = "$vs\VC\Auxiliary\Build"
+          "AMBUILD_VCVARS_X86=$build\vcvars32.bat"    | Out-File -FilePath $env:GITHUB_ENV -Append
+          "AMBUILD_VCVARS_X86_64=$build\vcvars64.bat" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "x86:    $build\vcvars32.bat (exists: $(Test-Path "$build\vcvars32.bat"))"
+          Write-Host "x86_64: $build\vcvars64.bat (exists: $(Test-Path "$build\vcvars64.bat"))"
 
       - name: Configure
         working-directory: webcon
