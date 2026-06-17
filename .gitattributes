@@ -1,2 +1,2 @@
 * text=auto
-libmicrohttpd/* linguist-vendored
+webcon/libmicrohttpd/** linguist-vendored

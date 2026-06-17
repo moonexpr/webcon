@@ -13,12 +13,19 @@ except:
 	sys.exit(1)
 
 run = run.BuildParser(sourcePath=sys.path[0], api='2.2')
+run.options.add_argument('--hl2sdk-root', type=str, dest='hl2sdk_root', default=None,
+                       help='Root search folder for HL2SDKs')
+run.options.add_argument('--mms-path', type=str, dest='mms_path', default=None,
+                       help='Path to Metamod:Source')
 run.options.add_argument('--sm-path', type=str, dest='sm_path', default=None,
                        help='Path to SourceMod')
 run.options.add_argument('--enable-debug', action='store_const', const='1', dest='debug',
                        help='Enable debugging symbols')
 run.options.add_argument('--enable-optimize', action='store_const', const='1', dest='opt',
                        help='Enable optimization')
+run.options.add_argument('-s', '--sdks', default='present', dest='sdks',
+                       help='Build against specified SDKs; valid args are "all", "present", or '
+                            'comma-delimited list of engine names')
 run.options.add_argument('--targets', type=str, dest='targets', default=None,
                        help='Override the target architectures (comma-separated, e.g. x86,x86_64)')
 run.Configure()

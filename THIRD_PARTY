@@ -1,0 +1,16 @@
+THIRD-PARTY SOFTWARE NOTICES
+
+The Webcon and Conplex extensions in this repository are licensed under the
+GNU General Public License v3.0 (see LICENSE).
+
+This repository vendors third-party code under a different license:
+
+  webcon/libmicrohttpd/  —  GNU libmicrohttpd
+      An in-tree copy of GNU libmicrohttpd, used by the Webcon HTTP server.
+      libmicrohttpd is licensed under the GNU Lesser General Public License,
+      version 2.1 or (at your option) any later version, with the eCos
+      exception. Its terms are unchanged by inclusion here.
+      Upstream: https://www.gnu.org/software/libmicrohttpd/
+
+The libmicrohttpd files retain their original LGPL terms; the GPLv3 in LICENSE
+covers the Webcon and Conplex extension code only.

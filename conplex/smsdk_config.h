@@ -40,7 +40,7 @@
 /* Basic information exposed publicly */
 #define SMEXT_CONF_NAME        "Conplex"
 #define SMEXT_CONF_DESCRIPTION "RCon Multiplexer"
-#define SMEXT_CONF_VERSION     __DATE__
+#define SMEXT_CONF_VERSION     "0.1.0"
 #define SMEXT_CONF_AUTHOR      "Asher \"asherkin\" Baker"
 #define SMEXT_CONF_URL         "https://limetech.org/"
 #define SMEXT_CONF_LOGTAG      "CONPLEX"
