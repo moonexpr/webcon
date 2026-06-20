@@ -44,6 +44,21 @@ jobs:
           submodules: recursive
           path: sourcemod
 
+      - name: Checkout Metamod:Source
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/metamod-source
+          ref: master
+          submodules: recursive
+          path: metamod-source
+
+      - name: Checkout HL2SDK (TF2)
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/hl2sdk
+          ref: tf2
+          path: hl2sdk-tf2
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -82,7 +97,10 @@ jobs:
         run: |
           mkdir build && cd build
           python ../configure.py --targets x86,x86_64 --enable-optimize \
-            --sm-path "${GITHUB_WORKSPACE}/sourcemod"
+            --sm-path "${GITHUB_WORKSPACE}/sourcemod" \
+            --mms-path "${GITHUB_WORKSPACE}/metamod-source" \
+            --hl2sdk-root "${GITHUB_WORKSPACE}" \
+            --sdks tf2
 
       - name: Build
         working-directory: webcon/build

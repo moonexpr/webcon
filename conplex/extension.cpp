@@ -3,9 +3,6 @@
 #include <utility>
 #include <cstdint>
 
-// Set to 1 and recompile to enable verbose protocol-detection debug logging.
-#define CONPLEX_DEBUG_VERBOSE 0
-
 #include "CDetour/detours.h"
 
 #include <fcntl.h>
@@ -50,11 +47,12 @@ bool shouldHandleProcessAccept;
 CDetour *detourProcessAccept;
 CDetour *detourRunFrame;
 
-#if !defined(NDEBUG) || CONPLEX_DEBUG_VERBOSE
-#define DEBUG_LOG rootconsole->ConsolePrint
-#else
-#define DEBUG_LOG(...)
-#endif
+ICvar *icvar = nullptr;
+ConVar conplex_debug("conplex_debug", "0", FCVAR_NONE,
+	"Enable verbose conplex protocol-detection logging to the console.");
+
+// Runtime-gated debug spew. Toggle live with `conplex_debug 1`.
+#define DEBUG_LOG(...) do { if (conplex_debug.GetBool()) rootconsole->ConsolePrint(__VA_ARGS__); } while (0)
 
 struct ConplexSocket {
 	ConplexSocket(int socket);
@@ -646,6 +644,19 @@ sp_nativeinfo_t natives[] = {
 	{"Conplex_RegisterProtocol", Conplex_RegisterProtocol},
 	{NULL, NULL}
 };
+
+bool Conplex::SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxlen, bool late)
+{
+	GET_V_IFACE_CURRENT(GetEngineFactory, icvar, ICvar, CVAR_INTERFACE_VERSION);
+	g_pCVar = icvar;
+	ConVar_Register(0, this);
+	return true;
+}
+
+bool Conplex::RegisterConCommandBase(ConCommandBase *pCommandBase)
+{
+	return META_REGCVAR(pCommandBase);
+}
 
 bool Conplex::SDK_OnLoad(char *error, size_t maxlength, bool late)
 {

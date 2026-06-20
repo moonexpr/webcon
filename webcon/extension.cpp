@@ -25,16 +25,13 @@
 #include "IConplex.h"
 #include "extension_spew.h"
 
-// Set to 1 and recompile to enable verbose per-connection debug logging.
-// Output is routed through WebLogger (stderr + optional file) so it lands in
-// the same place as the forwarded libmicrohttpd spew.
-#define WEBCON_DEBUG_VERBOSE 0
+ICvar *icvar = nullptr;
+ConVar webcon_debug("webcon_debug", "0", FCVAR_NONE,
+	"Enable verbose webcon debug logging (stderr/file via WebLogger).");
 
-#if WEBCON_DEBUG_VERBOSE
-#define WDLOG(...) WebLogger_Log(__VA_ARGS__)
-#else
-#define WDLOG(...)
-#endif
+// Runtime-gated verbose spew. Toggle live with `webcon_debug 1`. Routed through
+// WebLogger so it lands with the forwarded libmicrohttpd error spew.
+#define WDLOG(...) do { if (webcon_debug.GetBool()) WebLogger_Log(__VA_ARGS__); } while (0)
 
 Webcon g_Webcon;
 SMEXT_LINK(&g_Webcon);
@@ -665,6 +662,19 @@ bool ConplexHTTPSHandler(const char *id, int socket, const sockaddr *address, un
 void OnGameFrame(bool simulating)
 {
 	MHD_run(httpDaemon);
+}
+
+bool Webcon::SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxlen, bool late)
+{
+	GET_V_IFACE_CURRENT(GetEngineFactory, icvar, ICvar, CVAR_INTERFACE_VERSION);
+	g_pCVar = icvar;
+	ConVar_Register(0, this);
+	return true;
+}
+
+bool Webcon::RegisterConCommandBase(ConCommandBase *pCommandBase)
+{
+	return META_REGCVAR(pCommandBase);
 }
 
 bool Webcon::SDK_OnLoad(char *error, size_t maxlength, bool late)

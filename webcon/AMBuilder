@@ -8,19 +8,22 @@ project.sources += [
   os.path.join(Webcon.sm_root, 'public', 'smsdk_ext.cpp'),
 ]
 
-for cxx in Webcon.all_targets:
-  binary = project.Configure(cxx, 'webcon.ext', '{0} - {1}'.format(Webcon.tag, cxx.target.arch))
-  Webcon.ConfigureForExtension(builder, binary.compiler)
-  Webcon.AddLibMicrohttpd(binary)
+for sdk in Webcon.sdks.values():
+  for cxx in Webcon.all_targets:
+    binary = project.Configure(cxx, 'webcon.ext',
+                               '{0} - {1} - {2}'.format(Webcon.tag, sdk.name, cxx.target.arch))
+    Webcon.ConfigureForExtension(builder, binary.compiler)
+    Webcon.ConfigureForHL2(builder, binary, sdk)
+    Webcon.AddLibMicrohttpd(binary)
 
-  binary.compiler.includes += [
-    os.path.join(builder.sourcePath, 'conplex', 'public'),
-    os.path.join(builder.sourcePath, 'webcon', 'libmicrohttpd', 'include'),
-  ]
+    binary.compiler.includes += [
+      os.path.join(builder.sourcePath, 'conplex', 'public'),
+      os.path.join(builder.sourcePath, 'webcon', 'libmicrohttpd', 'include'),
+    ]
 
-  binary.compiler.defines += ['SOURCEMOD_BUILD']
+    binary.compiler.defines += ['SOURCEMOD_BUILD']
 
-  if binary.compiler.target.platform == 'windows':
-    binary.compiler.linkflags += ['ws2_32.lib']
+    if binary.compiler.target.platform == 'windows':
+      binary.compiler.linkflags += ['ws2_32.lib']
 
 Webcon.extensions += builder.Add(project)

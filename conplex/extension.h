@@ -3,13 +3,18 @@
 
 #include "smsdk_ext.h"
 #include "public/IConplex.h"
+#include <convar.h>
 
-class Conplex: public SDKExtension, IConplex
+class Conplex: public SDKExtension, IConplex, public IConCommandBaseAccessor
 {
 public: // SDKExtension
 	virtual bool SDK_OnLoad(char *error, size_t maxlength, bool late);
 	virtual void SDK_OnUnload();
-	
+	virtual bool SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxlength, bool late);
+
+public: // IConCommandBaseAccessor
+	bool RegisterConCommandBase(ConCommandBase *pCommandBase);
+
 public: // IConplex
 	virtual unsigned int GetInterfaceVersion();
 	virtual const char *GetInterfaceName();
