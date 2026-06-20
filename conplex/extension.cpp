@@ -3,6 +3,9 @@
 #include <utility>
 #include <cstdint>
 
+// Set to 1 and recompile to enable verbose protocol-detection debug logging.
+#define CONPLEX_DEBUG_VERBOSE 0
+
 #include "CDetour/detours.h"
 
 #include <fcntl.h>
@@ -47,7 +50,7 @@ bool shouldHandleProcessAccept;
 CDetour *detourProcessAccept;
 CDetour *detourRunFrame;
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || CONPLEX_DEBUG_VERBOSE
 #define DEBUG_LOG rootconsole->ConsolePrint
 #else
 #define DEBUG_LOG(...)
@@ -395,7 +398,7 @@ DETOUR_DECL_MEMBER0(ProcessAccept, void)
 		}
 
 		if (ret == -1 && !SocketWouldBlock()) {
-			DEBUG_LOG("(%d) recv error: %d", WSAGetLastError());
+			DEBUG_LOG("(%d) recv error: %d", pendingSocket->socket, WSAGetLastError());
 			closesocket(pendingSocket->socket);
 
 			pendingSockets.Remove(i);
@@ -407,8 +410,19 @@ DETOUR_DECL_MEMBER0(ProcessAccept, void)
 
 		if (ret > 0)
 		{
+#if CONPLEX_DEBUG_VERBOSE
+			{
+				char hexbuf[97]; // 32 bytes * 3 chars + null
+				int hexlen = 0;
+				for (int b = 0; b < ret && b < 32; ++b) {
+					hexlen += sprintf(hexbuf + hexlen, "%02x ", buffer[b]);
+				}
+				hexbuf[hexlen > 0 ? hexlen - 1 : 0] = '\0';
+				DEBUG_LOG("(%d) peek %d bytes: %s", pendingSocket->socket, ret, hexbuf);
+			}
+#endif
 			// TODO: Don't call handlers that have returned NoMatch already on a previous call for this connection.
-			for (NameHashSet<ProtocolHandler>::iterator i = protocolHandlers.iter(); !i.empty(); i.next()) {
+			for (NameHashSet<ProtocolHandler>::iterator i =protocolHandlers.iter(); !i.empty(); i.next()) {
 				if (!i->IsAlive()) {
 					i.erase();
 					continue;

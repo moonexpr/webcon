@@ -23,6 +23,18 @@
 #include "sm_namehashset.h"
 
 #include "IConplex.h"
+#include "extension_spew.h"
+
+// Set to 1 and recompile to enable verbose per-connection debug logging.
+// Output is routed through WebLogger (stderr + optional file) so it lands in
+// the same place as the forwarded libmicrohttpd spew.
+#define WEBCON_DEBUG_VERBOSE 0
+
+#if WEBCON_DEBUG_VERBOSE
+#define WDLOG(...) WebLogger_Log(__VA_ARGS__)
+#else
+#define WDLOG(...)
+#endif
 
 Webcon g_Webcon;
 SMEXT_LINK(&g_Webcon);
@@ -393,7 +405,10 @@ sp_nativeinfo_t natives[] = {
 
 int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls)
 {
+	WDLOG("DefaultConnectionHandler: method=%s url=%s version=%s", method, url, version);
+
 	if (url[0] != '/') {
+		WebLogger_Log("DefaultConnectionHandler: URL does not start with '/': \"%s\"", url);
 		return MHD_NO;
 	}
 
@@ -404,7 +419,9 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 		assert(i.found()); // It should have always been cleaned up before getting here.
 
 		if (i->IsAlive()) {
-			return i->Execute(connection, method, url) ? MHD_YES : MHD_NO;
+			bool execOk = i->Execute(connection, method, url);
+			WDLOG("defaultRequestHandler->Execute returned %s", execOk ? "YES" : "NO");
+			return execOk ? MHD_YES : MHD_NO;
 		} else {
 			defaultRequestHandler = NULL;
 
@@ -531,7 +548,9 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 		return success;
 	}
 
-	return i->Execute(connection, method, path) ? MHD_YES : MHD_NO;
+	bool execOk = i->Execute(connection, method, path);
+	WDLOG("handler '%s' Execute returned %s", id, execOk ? "YES" : "NO");
+	return execOk ? MHD_YES : MHD_NO;
 }
 
 void LogErrorCallback(void *cls, const char *fm, va_list ap)
@@ -540,6 +559,9 @@ void LogErrorCallback(void *cls, const char *fm, va_list ap)
 	size_t bytes = smutils->FormatArgs(buffer, sizeof(buffer), fm, ap);
 	buffer[bytes - 1] = '\0'; // Strip newline.
 	smutils->LogError(myself, "%s", buffer);
+
+	// Also forward to WebLogger for stderr/file spew (visible on the server console).
+	WebLogger_Log("%s", buffer);
 }
 
 void NotifyConnectionCallback(void *cls, MHD_Connection *connection, void **socket_context, MHD_ConnectionNotificationCode toe)
@@ -610,7 +632,11 @@ IConplex::ProtocolDetectionState ConplexHTTPDetector(const char *id, const unsig
 
 bool ConplexHTTPHandler(const char *id, int socket, const sockaddr *address, unsigned int addressLength)
 {
-	MHD_add_connection(httpDaemon, socket, address, addressLength);
+	WDLOG("ConplexHTTPHandler: socket=%d", socket);
+	int ret = MHD_add_connection(httpDaemon, socket, address, addressLength);
+	if (ret == MHD_NO) {
+		WebLogger_Log("MHD_add_connection failed for socket %d", socket);
+	}
 	return true; // MHD will close the socket on failure.
 }
 
@@ -698,6 +724,8 @@ void Webcon::SDK_OnUnload()
 	MHD_destroy_response(responseNotFound);
 
 	MHD_stop_daemon(httpDaemon);
+
+	WebLogger_Shutdown();
 
 	handlesys->RemoveType(handleTypeResponse, myself->GetIdentity());
 	handlesys->RemoveType(handleTypeConnection, myself->GetIdentity());
