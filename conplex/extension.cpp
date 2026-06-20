@@ -410,8 +410,7 @@ DETOUR_DECL_MEMBER0(ProcessAccept, void)
 
 		if (ret > 0)
 		{
-#if CONPLEX_DEBUG_VERBOSE
-			{
+			if (conplex_debug.GetBool()) {
 				char hexbuf[97]; // 32 bytes * 3 chars + null
 				int hexlen = 0;
 				for (int b = 0; b < ret && b < 32; ++b) {
@@ -420,7 +419,6 @@ DETOUR_DECL_MEMBER0(ProcessAccept, void)
 				hexbuf[hexlen > 0 ? hexlen - 1 : 0] = '\0';
 				DEBUG_LOG("(%d) peek %d bytes: %s", pendingSocket->socket, ret, hexbuf);
 			}
-#endif
 			// TODO: Don't call handlers that have returned NoMatch already on a previous call for this connection.
 			for (NameHashSet<ProtocolHandler>::iterator i =protocolHandlers.iter(); !i.empty(); i.next()) {
 				if (!i->IsAlive()) {
