@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <cstdint>
+#include <cctype>
 
 #include "microhttpd.h"
 
@@ -31,6 +32,65 @@ IConplex *conplex;
 
 MHD_Daemon *httpDaemon;
 MHD_Response *responseNotFound;
+
+static const size_t WEB_MAX_METHOD_LENGTH = 32;
+static const size_t WEB_MAX_URL_LENGTH = 2048;
+static const size_t WEB_MAX_HANDLER_ID_LENGTH = 64;
+
+static int QueuePlainResponse(MHD_Connection *connection, unsigned int status, const char *body)
+{
+	MHD_Response *response = MHD_create_response_from_buffer(strlen(body), (void *)body, MHD_RESPMEM_PERSISTENT);
+	MHD_add_response_header(response, MHD_HTTP_HEADER_CONTENT_TYPE, "text/plain; charset=UTF-8");
+	int ok = MHD_queue_response(connection, status, response);
+	MHD_destroy_response(response);
+	return ok;
+}
+
+static bool WebMethodIsValid(const char *method)
+{
+	if (method == NULL || method[0] == '\0') {
+		return false;
+	}
+
+	size_t length = strlen(method);
+	if (length > WEB_MAX_METHOD_LENGTH) {
+		return false;
+	}
+
+	for (size_t i = 0; i < length; i++) {
+		unsigned char c = (unsigned char)method[i];
+		if (!isupper(c) && !isdigit(c) && c != '-') {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static bool WebUrlIsValid(const char *url)
+{
+	if (url == NULL || url[0] != '/') {
+		return false;
+	}
+
+	size_t length = strlen(url);
+	if (length > WEB_MAX_URL_LENGTH) {
+		return false;
+	}
+
+	for (size_t i = 0; i < length; i++) {
+		char c = url[i];
+		if (c == '\r' || c == '\n') {
+			return false;
+		}
+	}
+
+	if (strstr(url, "..") != NULL) {
+		return false;
+	}
+
+	return true;
+}
 
 struct PluginRequestHandler
 {
@@ -105,6 +165,10 @@ bool PluginRequestHandler::IsAlive()
 
 bool PluginRequestHandler::Execute(MHD_Connection *connection, const char *method, const char *url)
 {
+	if (!WebMethodIsValid(method) || !WebUrlIsValid(url)) {
+		return false;
+	}
+
 	Handle_t handle = (Handle_t)(uintptr_t)(MHD_get_connection_info(connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT)->socket_context);
 
 	if (handle == BAD_HANDLE) {
@@ -119,6 +183,23 @@ bool PluginRequestHandler::Execute(MHD_Connection *connection, const char *metho
 	callback->Execute(&result);
 
 	return (result != 0);
+}
+
+static int InvokeRequestHandler(MHD_Connection *connection, PluginRequestHandler &handler, const char *method, const char *url)
+{
+	if (!WebMethodIsValid(method)) {
+		return QueuePlainResponse(connection, MHD_HTTP_BAD_REQUEST, "Bad Request");
+	}
+
+	if (!WebUrlIsValid(url)) {
+		return QueuePlainResponse(connection, MHD_HTTP_BAD_REQUEST, "Bad Request");
+	}
+
+	if (!handler.Execute(connection, method, url)) {
+		return QueuePlainResponse(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, "Internal Server Error");
+	}
+
+	return MHD_YES;
 }
 
 const char *defaultRequestHandler;
@@ -404,7 +485,7 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 		assert(i.found()); // It should have always been cleaned up before getting here.
 
 		if (i->IsAlive()) {
-			return i->Execute(connection, method, url) ? MHD_YES : MHD_NO;
+			return InvokeRequestHandler(connection, *i, method, url);
 		} else {
 			defaultRequestHandler = NULL;
 
@@ -476,6 +557,10 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 
 	if (end) {
 		size_t length = (end - id);
+		if (length > WEB_MAX_HANDLER_ID_LENGTH) {
+			return QueuePlainResponse(connection, MHD_HTTP_REQUEST_URI_TOO_LONG, "URI Too Long");
+		}
+
 		buffer = (char *)malloc(length + 1);
 
 		if (!buffer) {
@@ -487,6 +572,8 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 
 		path = end;
 		id = buffer;
+	} else if (strlen(id) > WEB_MAX_HANDLER_ID_LENGTH) {
+		return QueuePlainResponse(connection, MHD_HTTP_REQUEST_URI_TOO_LONG, "URI Too Long");
 	}
 
 	NameHashSet<PluginRequestHandler>::Result i = requestHandlers.find(id);
@@ -531,7 +618,7 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 		return success;
 	}
 
-	return i->Execute(connection, method, path) ? MHD_YES : MHD_NO;
+	return InvokeRequestHandler(connection, *i, method, path);
 }
 
 void LogErrorCallback(void *cls, const char *fm, va_list ap)
@@ -587,6 +674,14 @@ void NotifyConnectionCallback(void *cls, MHD_Connection *connection, void **sock
 
 IConplex::ProtocolDetectionState ConplexHTTPDetector(const char *id, const unsigned char *buffer, unsigned int bufferLength)
 {
+	if (bufferLength == 0) {
+		return IConplex::NeedMoreData;
+	}
+
+	if (buffer[0] < 'A' || buffer[0] > 'Z') {
+		return IConplex::NoMatch;
+	}
+
 	bool hasSpace = false;
 	bool hasSlash = false;
 	for (unsigned int i = 0; i < bufferLength; ++i) {

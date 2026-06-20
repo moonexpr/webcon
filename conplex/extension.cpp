@@ -37,6 +37,8 @@ typedef intptr_t ssize_t;
 
 #include "sm_namehashset.h"
 
+IConplex::ProtocolDetectionState ConplexRConDetector(const char *id, const unsigned char *buffer, unsigned int bufferLength);
+
 Conplex g_Conplex;
 SMEXT_LINK(&g_Conplex);
 
@@ -441,7 +443,10 @@ DETOUR_DECL_MEMBER0(ProcessAccept, void)
 		if (!handler) {
 			// Ran out of handlers or data.
 			if ((ret > 0 && pendingCount == 0) || ret == sizeof(buffer)) {
-				if (rconServer) {
+				// Only treat as failed RCON auth when the payload could plausibly
+				// be RCON. Random HTTP probes and fuzz traffic must not hit the engine
+				// RCON auth path — that can crash srcds on malformed input.
+				if (rconServer && ConplexRConDetector(NULL, buffer, ret) != IConplex::NoMatch) {
 					netadr_t address;
 					address.SetFromSockadr(&(pendingSocket->socketAddress));
 					rconServer->HandleFailedRconAuth(address);
