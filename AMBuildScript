@@ -394,6 +394,12 @@ class WebconConfig(object):
       if compiler.behavior == 'gcc':
         compiler.cflags += ['-fPIC']
 
+    # The HL2SDK headers are third-party and not clean under our -Werror (same
+    # treatment as the vendored libmicrohttpd). Downgrade to warnings so SDK
+    # diagnostics (unknown pragmas, macro redefines, dangling-else) don't fail.
+    if compiler.like('gcc'):
+      compiler.cflags += ['-Wno-error']
+
     mms_path = os.path.join(self.mms_root, 'core')
 
     compiler.cxxincludes += [
@@ -430,7 +436,8 @@ class WebconConfig(object):
       compiler.defines += ['COMPILER_GCC']
 
     if compiler.target.platform == 'linux':
-      compiler.defines += ['NO_HOOK_MALLOC', 'NO_MALLOC_OVERRIDE']
+      # The modern HL2SDK platform guards use bare LINUX, not _LINUX.
+      compiler.defines += ['LINUX', 'NO_HOOK_MALLOC', 'NO_MALLOC_OVERRIDE']
       compiler.linkflags += ['-lstdc++']
       compiler.defines += ['_GLIBCXX_USE_CXX11_ABI=0']
 
