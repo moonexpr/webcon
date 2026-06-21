@@ -4,7 +4,6 @@ import os
 project = builder.LibraryProject('webcon.ext')
 project.sources += [
   'extension.cpp',
-  'extension_spew.cpp',
   os.path.join(Webcon.sm_root, 'public', 'smsdk_ext.cpp'),
 ]
 

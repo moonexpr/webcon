@@ -24,15 +24,15 @@
 #include "sm_namehashset.h"
 
 #include "IConplex.h"
-#include "extension_spew.h"
 
 ICvar *icvar = nullptr;
 ConVar webcon_debug("webcon_debug", "0", FCVAR_NONE,
-	"Enable verbose webcon debug logging (stderr/file via WebLogger).");
+	"Enable verbose webcon debug logging (to the SourceMod error log).");
 
 // Runtime-gated verbose spew. Toggle live with `webcon_debug 1`. Routed through
-// WebLogger so it lands with the forwarded libmicrohttpd error spew.
-#define WDLOG(...) do { if (webcon_debug.GetBool()) WebLogger_Log(__VA_ARGS__); } while (0)
+// SourceMod's logger so it lands in the SM error log alongside the forwarded
+// libmicrohttpd error spew.
+#define WDLOG(...) do { if (webcon_debug.GetBool()) smutils->LogError(myself, __VA_ARGS__); } while (0)
 
 Webcon g_Webcon;
 SMEXT_LINK(&g_Webcon);
@@ -486,7 +486,7 @@ int DefaultConnectionHandler(void *cls, MHD_Connection *connection, const char *
 	WDLOG("DefaultConnectionHandler: method=%s url=%s version=%s", method, url, version);
 
 	if (url[0] != '/') {
-		WebLogger_Log("DefaultConnectionHandler: URL does not start with '/': \"%s\"", url);
+		smutils->LogError(myself, "DefaultConnectionHandler: URL does not start with '/': \"%s\"", url);
 		return MHD_NO;
 	}
 
@@ -643,9 +643,6 @@ void LogErrorCallback(void *cls, const char *fm, va_list ap)
 	size_t bytes = smutils->FormatArgs(buffer, sizeof(buffer), fm, ap);
 	buffer[bytes - 1] = '\0'; // Strip newline.
 	smutils->LogError(myself, "%s", buffer);
-
-	// Also forward to WebLogger for stderr/file spew (visible on the server console).
-	WebLogger_Log("%s", buffer);
 }
 
 void NotifyConnectionCallback(void *cls, MHD_Connection *connection, void **socket_context, MHD_ConnectionNotificationCode toe)
@@ -727,7 +724,7 @@ bool ConplexHTTPHandler(const char *id, int socket, const sockaddr *address, uns
 	WDLOG("ConplexHTTPHandler: socket=%d", socket);
 	int ret = MHD_add_connection(httpDaemon, socket, address, addressLength);
 	if (ret == MHD_NO) {
-		WebLogger_Log("MHD_add_connection failed for socket %d", socket);
+		smutils->LogError(myself, "MHD_add_connection failed for socket %d", socket);
 	}
 	return true; // MHD will close the socket on failure.
 }
@@ -829,8 +826,6 @@ void Webcon::SDK_OnUnload()
 	MHD_destroy_response(responseNotFound);
 
 	MHD_stop_daemon(httpDaemon);
-
-	WebLogger_Shutdown();
 
 	handlesys->RemoveType(handleTypeResponse, myself->GetIdentity());
 	handlesys->RemoveType(handleTypeConnection, myself->GetIdentity());
