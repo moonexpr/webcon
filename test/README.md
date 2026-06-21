@@ -21,10 +21,3 @@ the handler, and answered — exercising both extensions together.
 Expected: `E2E-OK conplex+webcon x64` (HTTP 200), served by the plugin handler.
 A built-in `404 Not Found` instead means the request reached webcon but not the
 handler (wrong path); a connection failure means conplex did not route it.
-
-## Fuzzing
-
-`fuzz/` holds the adversarial counterpart to this smoke test — a raw-socket HTTP
-fuzzer that hammers the game-port listener with malformed requests and checks
-that the server survives. Its batch driver waits on the same `WEB-E2E`
-readiness sentinel this plugin prints. See `fuzz/README.md`.
